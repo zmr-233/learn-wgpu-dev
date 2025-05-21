@@ -54,6 +54,7 @@ impl CameraUniform {
 
     fn update_view_proj(&mut self, camera: &Camera) {
         // We're using Vector4 because ofthe camera_uniform 16 byte spacing requirement
+        // 使用 vec4 纯粹是因为 Uniform 的 16 字节对齐要求
         self.view_position = camera.eye.extend(1.0).into();
         self.view_proj = camera.build_view_projection_matrix().to_cols_array_2d();
     }
@@ -156,6 +157,7 @@ impl Instance {
             glam::Mat4::from_translation(self.position) * glam::Mat4::from_quat(self.rotation);
         InstanceRaw {
             model: model.to_cols_array_2d(),
+            // 新增!
             normal: glam::Mat3::from_mat4(glam::Mat4::from_quat(self.rotation)).to_cols_array_2d(),
         }
     }
@@ -203,6 +205,7 @@ impl model::Vertex for InstanceRaw {
                     shader_location: 8,
                     format: wgpu::VertexFormat::Float32x4,
                 },
+                // 我们只需要用到矩阵的旋转分量，故法线矩阵的类型是 Matrix3 而不是 Matrix4
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
                     shader_location: 9,
@@ -275,6 +278,7 @@ impl WgpuApp {
     }
 }
 
+// 把创建渲染管线的代码提取到一个叫做 create_render_pipeline() 的新函数中
 fn create_render_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -312,6 +316,7 @@ fn create_render_pipeline(
             strip_index_format: None,
             front_face: wgpu::FrontFace::Ccw,
             cull_mode: Some(wgpu::Face::Back),
+            // 此处设置为 Fill 以外的任何值都需要开启 Feature::NON_FILL_POLYGON_MODE
             // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
             polygon_mode: wgpu::PolygonMode::Fill,
             // Requires Features::DEPTH_CLIP_CONTROL
@@ -424,6 +429,7 @@ impl WgpuAppAction for WgpuApp {
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
+                        // 由于现在要在片元着色器中使用 Uniform，得修改它的可见性：
                         visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
@@ -453,6 +459,7 @@ impl WgpuAppAction for WgpuApp {
         .await
         .unwrap();
 
+        // 接下来，创建一个 Uniform 缓冲区来存储我们的光源：
         let light_uniform = LightUniform {
             position: [2.0, 2.0, 2.0],
             _padding: 0,
@@ -465,6 +472,7 @@ impl WgpuAppAction for WgpuApp {
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Light VB"),
                 contents: bytemuck::cast_slice(&[light_uniform]),
+                // 我们希望能更新光源位置，所以用了 COPY_DST 这个使用范围标志// 我们希望能更新光源位置，所以用了 COPY_DST 这个使用范围标志
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
@@ -496,19 +504,20 @@ impl WgpuAppAction for WgpuApp {
         let depth_texture =
             texture::Texture::create_depth_texture(&app.device, &app.config, "depth_texture");
 
-        let render_pipeline_layout =
-            app.device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Render Pipeline Layout"),
-                    bind_group_layouts: &[
-                        &texture_bind_group_layout,
-                        &camera_bind_group_layout,
-                        &light_bind_group_layout,
-                    ],
-                    push_constant_ranges: &[],
-                });
-
+        // 修改 WgpuApp::new() 中的代码来调用 create_render_pipeline 函数：
         let render_pipeline = {
+            let render_pipeline_layout =
+                app.device
+                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("Render Pipeline Layout"),
+                        bind_group_layouts: &[
+                            &texture_bind_group_layout,
+                            &camera_bind_group_layout,
+                            // 把它们添加到 WgpuApp 中，同时更新 render_pipeline_layout：
+                            &light_bind_group_layout,
+                        ],
+                        push_constant_ranges: &[],
+                    });
             let shader = wgpu::ShaderModuleDescriptor {
                 label: Some("Normal Shader"),
                 source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
@@ -523,6 +532,7 @@ impl WgpuAppAction for WgpuApp {
             )
         };
 
+        // 完成这些后，就可以为我们的光源创建另一条渲染管线了：
         let light_render_pipeline = {
             let layout = app
                 .device
@@ -643,6 +653,7 @@ impl WgpuAppAction for WgpuApp {
             });
 
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+            // 最后，在渲染通道中加入光源的渲染：
             render_pass.set_pipeline(&self.light_render_pipeline);
             render_pass.draw_light_model(
                 &self.obj_model,

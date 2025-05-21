@@ -291,6 +291,7 @@ impl WgpuApp {
 
             self.camera.aspect = self.app.config.width as f32 / self.app.config.height as f32;
             // NEW!
+            // 修改 resize_surface_if_needed() 函数来更新深度纹理及它的纹理视图
             self.depth_texture = texture::Texture::create_depth_texture(
                 &self.app.device,
                 &self.app.config,
@@ -436,6 +437,7 @@ impl WgpuAppAction for WgpuApp {
                 source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
             });
 
+        // 在 WgpuApp::new() 中创建我们的 depth_texture：
         let depth_texture =
             texture::Texture::create_depth_texture(&app.device, &app.config, "depth_texture");
 
@@ -483,10 +485,14 @@ impl WgpuAppAction for WgpuApp {
                     // Requires Features::CONSERVATIVE_RASTERIZATION
                     conservative: false,
                 },
+                // 然后修改渲染管线以启用深度测试：
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: texture::Texture::DEPTH_FORMAT,
                     depth_write_enabled: true,
+                    // depth_compare 字段指定通过深度测试的条件。
+                    // 使用 LESS 意味着像素将被从后往前绘制，大于当前位置的深度值的像素将被丢弃
                     depth_compare: wgpu::CompareFunction::Less,
+                    // 模版缓冲区（Stencil Buffer）。模版缓冲区和深度缓冲区通常被存储在同一个纹理中
                     stencil: wgpu::StencilState::default(),
                     bias: wgpu::DepthBiasState::default(),
                 }),
@@ -593,6 +599,7 @@ impl WgpuAppAction for WgpuApp {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
+                // 只需把它绑定到渲染通道的depth_stencil_attachment 字段即可
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.depth_texture.view,
                     depth_ops: Some(wgpu::Operations {

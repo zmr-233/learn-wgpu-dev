@@ -36,6 +36,8 @@ impl Vertex {
     }
 }
 
+// 着重注意：  wgpu 的世界坐标的 Y 轴朝上，而纹理坐标的 Y 轴朝下
+// 换句话说，纹理坐标中的（0，0）对应于图像的左上方，而（1，1）是右下方
 const VERTICES: &[Vertex] = &[
     Vertex {
         position: [-0.0868241, 0.49240386, 0.0],
@@ -89,17 +91,22 @@ impl WgpuAppAction for WgpuApp {
         // 创建 wgpu 应用
         let app = AppSurface::new(window).await;
 
-        let diffuse_bytes = include_bytes!("happy-tree.png");
+        //1. 纹理加载
+        let diffuse_bytes: &'static [u8; 28134] = include_bytes!("happy-tree.png");
         let diffuse_texture =
             texture::Texture::from_bytes(&app.device, &app.queue, diffuse_bytes, "happy-tree.png")
                 .unwrap();
 
+        //2. 绑定组布局（BindGroupLayout）
+        // 一个是绑定到 0 资源槽的纹理，另一个是绑定到 1 资源槽的采样器
         let texture_bind_group_layout =
             app.device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
+                            // 2.1 绑定只对由 visibility 字段指定的片元着色器可见
+                            // 可选值是 NONE、VERTEX、FRAGMENT 或 COMPUTE
                             visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 multisampled: false,
@@ -118,13 +125,18 @@ impl WgpuAppAction for WgpuApp {
                     label: Some("texture_bind_group_layout"),
                 });
 
+        //3. 绑定组（BindGroup）
+        // 使用绑定组布局（texture_bind_group_layout）来创建绑定组
         let diffuse_bind_group = app.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            // 绑定组是绑定组布局的一个更具体的声明, 只要是共享同一个绑定组布局的绑定组，就能在运行时实时切换
             layout: &texture_bind_group_layout,
             entries: &[
+                // 绑定组的第一个绑定槽
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
                 },
+                // 绑定组的第二个绑定槽
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
@@ -140,10 +152,12 @@ impl WgpuAppAction for WgpuApp {
                 source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
             });
 
+        //4. 渲染管线布局
         let render_pipeline_layout =
             app.device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Pipeline Layout"),
+                    // 管线布局包含一个管线可以使用的绑定组布局的列表
                     bind_group_layouts: &[&texture_bind_group_layout],
                     push_constant_ranges: &[],
                 });
@@ -272,6 +286,7 @@ impl WgpuAppAction for WgpuApp {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
+            // 在 render() 函数中使用绑定组:
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);

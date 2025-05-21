@@ -14,9 +14,215 @@ mod model;
 mod resources;
 mod texture;
 
-use model::{DrawModel, Vertex};
+use model::{DrawModel, ModelVertex, Vertex};
 
 const NUM_INSTANCES_PER_ROW: u32 = 10;
+
+const DEPTH_VERTICES: &[ModelVertex] = &[
+    ModelVertex {
+        position: [0.0, 0.0, 0.0],
+        tex_coords: [0.0, 1.0],
+        normal: [0.0, 0.0, 1.0],
+    },
+    ModelVertex {
+        position: [1.0, 0.0, 0.0],
+        tex_coords: [1.0, 1.0],
+        normal: [0.0, 0.0, 1.0],
+    },
+    ModelVertex {
+        position: [1.0, 1.0, 0.0],
+        tex_coords: [1.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+    },
+    ModelVertex {
+        position: [0.0, 1.0, 0.0],
+        tex_coords: [0.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+    },
+];
+
+const DEPTH_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
+
+struct DepthPass {
+    texture: texture::Texture,
+    layout: wgpu::BindGroupLayout,
+    bind_group: wgpu::BindGroup,
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    num_depth_indices: u32,
+    render_pipeline: wgpu::RenderPipeline,
+}
+
+impl DepthPass {
+    fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> Self {
+        let texture = texture::Texture::create_depth_texture(device, config, "depth_texture");
+
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Depth Pass Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    count: None,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                },
+            ],
+            label: Some("depth_pass.bind_group"),
+        });
+
+        // 这里只画了两个三角形 纹理是深度图
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Depth Pass VB"),
+            contents: bytemuck::cast_slice(DEPTH_VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Depth Pass IB"),
+            contents: bytemuck::cast_slice(DEPTH_INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Shadow Display Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("depth.wgsl").into()),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Depth Pass Pipeline Layout"),
+            bind_group_layouts: &[&layout],
+            push_constant_ranges: &[],
+        });
+
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Depth Pass Render Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &[ModelVertex::desc()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format.add_srgb_suffix(),
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent::REPLACE,
+                        alpha: wgpu::BlendComponent::REPLACE,
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                // Requires Features::DEPTH_CLIP_CONTROL
+                unclipped_depth: false,
+                // Requires Features::CONSERVATIVE_RASTERIZATION
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            // If the pipeline will be used with a multiview render pass, this
+            // indicates how many array layers the attachments will have.
+            multiview: None,
+            cache: None,
+        });
+
+        Self {
+            texture,
+            layout,
+            bind_group,
+            vertex_buffer,
+            index_buffer,
+            num_depth_indices: DEPTH_INDICES.len() as u32,
+            render_pipeline,
+        }
+    }
+
+    fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
+        self.texture = texture::Texture::create_depth_texture(device, config, "depth_texture");
+        self.bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &self.layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&self.texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.texture.sampler),
+                },
+            ],
+            label: Some("depth_pass.bind_group"),
+        });
+    }
+    // 可以这样理解——只要你为每个「窗口」（或渲染目标）都拿到对应的 TextureView，
+    // 就可以用同一个 CommandEncoder 先后开启多个 RenderPass，分别往不同的 view 里画面，最后一并提交给 GPU。
+
+    // 实现步骤大致是：
+
+    // 1. 对每个窗口调用 surface.get_current_texture() → texture.create_view()
+    // 2. 用同一个 encoder
+    // 3. begin_render_pass(view = &view0) { …draw for window0… }
+    // 4. begin_render_pass(view = &view1) { …draw for window1… }
+    // …
+    // queue.submit(Some(encoder.finish()))
+    // 这样可以一次性把所有窗口的渲染命令打包提交。但要注意每个窗口/Surface 需要各自管理自己的 swapchain 配置和当前帧纹理。
+    // 原来可以把encoder直接传入，直接在里面渲染
+    fn render(&self, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Depth Visual Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            ..Default::default()
+        });
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.draw_indexed(0..self.num_depth_indices, 0, 0..1);
+    }
+}
 
 struct Camera {
     eye: glam::Vec3,
@@ -216,7 +422,8 @@ struct WgpuApp {
     instances: Vec<Instance>,
     #[allow(dead_code)]
     instance_buffer: wgpu::Buffer,
-    depth_texture: texture::Texture,
+    // depth_texture: texture::Texture,
+    depth_pass: DepthPass,
 }
 
 impl WgpuApp {
@@ -227,11 +434,12 @@ impl WgpuApp {
                 .resize_surface_by_size((self.size.width, self.size.height));
 
             self.camera.aspect = self.app.config.width as f32 / self.app.config.height as f32;
-            self.depth_texture = texture::Texture::create_depth_texture(
-                &self.app.device,
-                &self.app.config,
-                "depth_texture",
-            );
+            self.depth_pass.resize(&self.app.device, &self.app.config);
+            // self.depth_texture = texture::Texture::create_depth_texture(
+            //     &self.app.device,
+            //     &self.app.config,
+            //     "depth_texture",
+            // );
 
             self.size_changed = false;
         }
@@ -243,6 +451,7 @@ impl WgpuAppAction for WgpuApp {
         // 创建 wgpu 应用
         let app = AppSurface::new(window).await;
 
+        // 材质布局是被传入的
         let texture_bind_group_layout =
             app.device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -347,6 +556,7 @@ impl WgpuAppAction for WgpuApp {
             "cube.obj",
             &app.device,
             &app.queue,
+            // 把纹理绑定组布局传入 load_model 函数
             &texture_bind_group_layout,
         )
         .await
@@ -359,8 +569,8 @@ impl WgpuAppAction for WgpuApp {
                 source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
             });
 
-        let depth_texture =
-            texture::Texture::create_depth_texture(&app.device, &app.config, "depth_texture");
+        // let depth_texture =
+        //     texture::Texture::create_depth_texture(&app.device, &app.config, "depth_texture");
 
         let render_pipeline_layout =
             app.device
@@ -424,6 +634,7 @@ impl WgpuAppAction for WgpuApp {
             });
 
         let size = PhysicalSize::new(app.config.width, app.config.height);
+        let depth_pass = DepthPass::new(&app.device, &app.config);
 
         Self {
             app,
@@ -438,7 +649,8 @@ impl WgpuAppAction for WgpuApp {
             camera_uniform,
             instances,
             instance_buffer,
-            depth_texture,
+            // depth_texture,
+            depth_pass,
         }
     }
 
@@ -495,7 +707,8 @@ impl WgpuAppAction for WgpuApp {
                     },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture.view,
+                    // 这里的 view 是深度纹理的 view
+                    view: &self.depth_pass.texture.view, //&self.depth_texture.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: wgpu::StoreOp::Store,
@@ -507,13 +720,15 @@ impl WgpuAppAction for WgpuApp {
 
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_pipeline(&self.render_pipeline);
+            // 相当于隐式耦合 因为布局在pipeline里就被固定了
             render_pass.draw_model_instanced(
                 &self.obj_model,
                 0..self.instances.len() as u32,
                 &self.camera_bind_group,
             );
         }
-
+        // 单独渲染一遍深度纹理
+        self.depth_pass.render(&view, &mut encoder);
         self.app.queue.submit(Some(encoder.finish()));
         output.present();
 

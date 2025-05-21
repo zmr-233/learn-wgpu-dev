@@ -9,6 +9,7 @@ pub struct Texture {
 }
 
 impl Texture {
+    //1. 创建深度纹理及 render_pipeline 需要的 DepthStencilState 对象
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     pub fn create_depth_texture(
@@ -16,6 +17,7 @@ impl Texture {
         config: &wgpu::SurfaceConfiguration,
         label: &str,
     ) -> Self {
+        //2. 深度纹理的宽高需要与展示平面一致
         let size = wgpu::Extent3d {
             width: config.width,
             height: config.height,
@@ -28,12 +30,16 @@ impl Texture {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: 
+                wgpu::TextureUsages::RENDER_ATTACHMENT 
+                //3. 由于要对这个纹理进行渲染，我们需要给它添加 RENDER_ATTACHMENT 使用范围标志
+                | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };
         let texture = device.create_texture(&desc);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            //4. 从技术的角度来看，我们不需要深度纹理的采样器，是我们的 Texture 结构体需要它
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,

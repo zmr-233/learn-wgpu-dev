@@ -533,6 +533,7 @@ impl WgpuAppAction for WgpuApp {
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
 
+        // 逐帧变更实例的位置 和/或 旋转弧度
         for instance in &mut self.instances {
             let amount = glam::Quat::from_rotation_y(ROTATION_SPEED);
             let current = instance.rotation;

@@ -79,6 +79,12 @@ impl WgpuApp {
             })
             .await
             .unwrap();
+        let _ = instance
+            .enumerate_adapters(wgpu::Backends::all())
+            .iter()
+            .for_each(|adapter| {
+                log::info!("Adapter: {:?}", adapter.get_info());
+            });
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
@@ -103,6 +109,9 @@ impl WgpuApp {
         let config = surface
             .get_default_config(&adapter, size.width, size.height)
             .unwrap();
+        dbg!(&config);
+        let modes = surface.get_capabilities(&adapter).present_modes;
+        log::info!("Surface present modes: {:?}", modes);
         surface.configure(&device, &config);
 
         Self {
@@ -146,16 +155,16 @@ impl WgpuApp {
         }
         self.resize_surface_if_needed();
 
-        let output = self.surface.get_current_texture()?;
-        let view = output
+        let output: wgpu::SurfaceTexture = self.surface.get_current_texture()?;
+        let view: wgpu::TextureView = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+        let mut encoder: wgpu::CommandEncoder =
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                });
 
         {
             let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -239,6 +248,7 @@ impl ApplicationHandler for WgpuAppHandler {
                     }
                 });
             } else {
+                // 使用 pollster 提供的 `block_on` 函数来等待异步任务执行完成
                 let wgpu_app = pollster::block_on(WgpuApp::new(window));
                 self.app.lock().replace(wgpu_app);
                 // NOTE: 在非 web 端，不会错失窗口大小变化事件和请求重绘事件

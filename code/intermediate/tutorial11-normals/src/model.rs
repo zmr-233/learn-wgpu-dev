@@ -12,6 +12,7 @@ pub struct ModelVertex {
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],
     pub normal: [f32; 3],
+    // 使用三角形的边和法线来计算切向量与副切向量
     pub tangent: [f32; 3],
     pub bitangent: [f32; 3],
 }
@@ -58,6 +59,7 @@ impl Vertex for ModelVertex {
 pub struct Material {
     pub name: String,
     pub diffuse_texture: texture::Texture,
+    // 新增一个法线纹理 normal_texture 字段
     pub normal_texture: texture::Texture,
     pub bind_group: wgpu::BindGroup,
 }
@@ -81,7 +83,7 @@ impl Material {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
                 },
-                // NEW!
+                // 以包括法线贴图：
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::TextureView(&normal_texture.view),

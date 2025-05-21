@@ -71,16 +71,20 @@ pub async fn load_model(
     layout: &wgpu::BindGroupLayout,
 ) -> anyhow::Result<model::Model> {
     let obj_text = load_string(file_name).await?;
+    // Cursor<String> 把 内存中的字符串 实现成 Read + Seek，这样 tobj 能把它当“文件”
     let obj_cursor = Cursor::new(obj_text);
+    // 外层 BufReader 做缓存、提高逐字节解析性能
     let mut obj_reader = BufReader::new(obj_cursor);
 
     let (models, obj_materials) = tobj::load_obj_buf_async(
         &mut obj_reader,
         &tobj::LoadOptions {
-            triangulate: true,
-            single_index: true,
+            triangulate: true,  // ⚠ 把多边形先切成三角形→GPU最友好
+            single_index: true, // ⚠ 位置/法线/UV 共用一套索引 → 易于生成顶点缓存
             ..Default::default()
         },
+        //拿到 .mtl 路径 p 后再次 load_string 读取 .mtl 文本
+        //用 tobj::load_mtl_buf 把材质解析为 tobj::Material 列表返回
         |p| async move {
             let mat_text = load_string(&p).await.unwrap();
             tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
@@ -90,6 +94,7 @@ pub async fn load_model(
 
     let mut materials = Vec::new();
     for m in obj_materials? {
+        // 逐材质读取 漫反射贴图（m.diffuse_texture 字段是 .mtl 里 map_Kd 指定的文件名
         let diffuse_texture = load_texture(&m.diffuse_texture, device, queue).await?;
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout,
@@ -116,6 +121,7 @@ pub async fn load_model(
     let meshes = models
         .into_iter()
         .map(|m| {
+            // ① 把位置/法线/UV 三条扁平数组拼成 Vec<ModelVertex>
             let vertices = (0..m.mesh.positions.len() / 3)
                 .map(|i| model::ModelVertex {
                     position: [
@@ -131,7 +137,7 @@ pub async fn load_model(
                     ],
                 })
                 .collect::<Vec<_>>();
-
+            // ② 一条语句就创建/填充 wgpu::Buffer（STAGING + COPY + VERTEX）
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("{file_name:?} Vertex Buffer")),
                 contents: bytemuck::cast_slice(&vertices),

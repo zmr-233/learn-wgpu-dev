@@ -17,6 +17,9 @@ wgpu.workspace = true
 app-surface.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }
 utils.workspace = true
+# 需要避免在 wasm 中添加 pollster 依赖，否则会导致 wasm 加载时报错：
+# An error occurred loading "XXX": TypeError: Failed to resolve module specifier "env". Relative references must start with either "/", "./", or "../".
+pollster.workspace = true
 
 [dependencies.image]
 workspace = true

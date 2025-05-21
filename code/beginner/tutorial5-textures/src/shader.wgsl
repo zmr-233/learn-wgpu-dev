@@ -21,7 +21,9 @@ fn vs_main(
 }
 
 // 片元着色器
-
+// 变量 t_diffuse 和 s_diffuse 就是所谓的 uniforms
+// @group(x) 对应于 set_bind_group() 中的第一个参数
+// @binding(x) 与我们创建绑定组布局和绑定组时指定的 binding 值对应
 @group(0) @binding(0)
 var t_diffuse: texture_2d<f32>;
 @group(0)@binding(1)

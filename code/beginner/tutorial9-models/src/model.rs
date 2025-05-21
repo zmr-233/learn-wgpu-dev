@@ -46,17 +46,25 @@ impl Vertex for ModelVertex {
 pub struct Material {
     pub name: String,
     pub diffuse_texture: texture::Texture,
+    // 纹理视图 + 采样器与某个 BindGroupLayout 做实例化
+    // 在渲染过程中调用 render_pass.set_bind_group(0, &material.bind_group, &[]) 即可让着色器看见这张贴图。
     pub bind_group: wgpu::BindGroup,
 }
 
 pub struct Mesh {
+    // Mesh 包含一个顶点缓冲区、一个索引缓冲区和网格中的索引数
     pub name: String,
+    // Vertex Buffer / Index Buffer GPU 端真正的几何数据。
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
+    // num_elements 是“绘制多少个 index” → draw_indexed(0..num_elements, 0, instances).
     pub num_elements: u32,
+    // material 字段被定义为 usize 类型，它将用于在绘制时索引 materials 列表
     pub material: usize,
 }
 
+// Model 结构体中 meshes 和 materials 两个字段都是动态数组类型
+// 一个 obj 文件可以包含多个网格和材质
 pub struct Model {
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
@@ -124,6 +132,7 @@ where
         camera_bind_group: &'b wgpu::BindGroup,
     ) {
         for mesh in &model.meshes {
+            // 将绘制模型的所有网格和对应的材质：
             let material = &model.materials[mesh.material];
             self.draw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group);
         }

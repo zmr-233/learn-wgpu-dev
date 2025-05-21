@@ -25,7 +25,7 @@ fn vs_main(@location(0) pos0: vec3f,
             @location(1) pos1: vec3f,
             @location(2) target_pos0: vec3f, 
             @location(3) target_pos1: vec3f,
-             @builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+            @builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     
     var positions = array<vec3f, 6>(
         vec3(0., -0.5, 0.),

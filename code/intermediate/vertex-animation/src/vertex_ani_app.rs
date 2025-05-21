@@ -39,6 +39,8 @@ impl WgpuAppAction for VertexAnimationApp {
         let mut app = AppSurface::new(window).await;
 
         // 兼容 web
+        // WebGL 环境不一定支持 TextureFormat::Rgba8UnormSrgb，
+        // 为保证浏览器平台兼容性改用 linear 颜色空间纹理格式。
         let format = app.config.format.remove_srgb_suffix();
         app.ctx.update_config_format(format);
 
@@ -81,13 +83,17 @@ impl WgpuAppAction for VertexAnimationApp {
         };
 
         // 翻页动作总帧总
-        let draw_count = 60 * 3;
-        let offset_buffer_size = 256;
+        let draw_count = 60 * 3; // 3 秒 @ 60 FPS
+        let offset_buffer_size = 256; // 单次动态偏移需 256 字节对齐
+        // 动态 Uniform Buffer (Dynamic UBO)：一次创建大缓冲，
+        // 每帧用 base_offset = frame_index * aligned_size 访问自己的片段，减少频繁创建/销毁
+        // for-loop 里调用 self.step_turning_data 计算该帧卷页参数（圆角半径、旋转角度、卷起向量等），
+        // 通过 queue.write_buffer 写入对应偏移区
         let turning_buf = BufferObj::create_empty_uniform_buffer(
             &app.device,
             (draw_count * offset_buffer_size) as wgpu::BufferAddress,
             offset_buffer_size,
-            true,
+            true, // 使用动态偏移
             Some("翻页动画的动态偏移缓冲区"),
         );
 
@@ -108,6 +114,7 @@ impl WgpuAppAction for VertexAnimationApp {
         }
 
         // 平面网格
+        // 构造 300 × 300 细分 plane，可在 Shader 中获得足够密度实现弯曲（卷页）效果。
         let (vertices, indices) = Plane::new(300, 300).generate_vertices();
 
         // 准备绑定组需要的数据
@@ -142,6 +149,8 @@ impl WgpuAppAction for VertexAnimationApp {
             visibilitys: vec![wgpu::ShaderStages::FRAGMENT, wgpu::ShaderStages::FRAGMENT],
             ..Default::default()
         };
+
+        // BufferlessFullscreenNode 则使用内置的全屏三角形技术，无需顶点缓冲，专用于绘制背景
         let bg_node = BufferlessFullscreenNode::new(
             &app.device,
             format,

@@ -175,7 +175,7 @@ impl<A: WgpuAppAction + 'static> ApplicationHandler for WgpuAppHandler<A> {
                 let missed_request_redraw = self.missed_request_redraw.clone();
 
                 wasm_bindgen_futures::spawn_local(async move {
-                     let window_cloned = window.clone();
+                    let window_cloned = window.clone();
 
                     let wgpu_app = A::new(window).await;
                     let mut app = app.lock();
@@ -267,7 +267,6 @@ impl<A: WgpuAppAction + 'static> ApplicationHandler for WgpuAppHandler<A> {
                 app.update(dt);
 
                 self.pre_present_notify();
-
                 match app.render() {
                     Ok(_) => {}
                     // 当展示平面的上下文丢失，就需重新配置

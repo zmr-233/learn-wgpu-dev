@@ -40,6 +40,7 @@ impl WgpuAppAction for WgpuApp {
     async fn new(window: Arc<winit::window::Window>) -> Self {
         // 创建 wgpu 应用
         let app = AppSurface::new(window).await;
+        // dbg!(app.adapter.limits());
 
         let (tex, size) = resource::load_a_texture(&app);
         let original_tv = tex.create_view(&wgpu::TextureViewDescriptor {
@@ -53,6 +54,8 @@ impl WgpuAppAction for WgpuApp {
             height: size.height / 2,
             depth_or_array_layers: 1,
         };
+        // 存储缓冲区与存储纹理
+        // 与其它缓冲区及纹理的创建是一样的，只需要在 usage 字段中标记出用途：
         let usage = TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING;
 
         let get_a_tv = |usage: wgpu::TextureUsages| {
@@ -63,11 +66,13 @@ impl WgpuAppAction for WgpuApp {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: SWAP_FORMAT,
+                // TEXTURE_BINDING | STORAGE_BINDING 表示此纹理可以做为采样纹理以及存储纹理来使用
                 usage,
                 view_formats: &[],
             });
             tex.create_view(&wgpu::TextureViewDescriptor::default())
         };
+        // VERTEX | STORAGE 表示此缓冲区可以做为顶点缓冲区以及存储缓冲区来使用
         let blur_xy_tv = get_a_tv(usage | TextureUsages::RENDER_ATTACHMENT);
         let swap_x_tv = get_a_tv(usage);
 
@@ -97,6 +102,7 @@ impl WgpuAppAction for WgpuApp {
         // 计算工作组大小
         let workgroup_count = ((swap_size.width + 15) / 16, (swap_size.height + 15) / 16);
 
+        // "乒乓缓冲"(ping-pong buffer) 策略
         let blur_x = BlurNode::new(
             &app,
             [img_size, [1, 0]],

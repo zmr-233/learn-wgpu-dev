@@ -11,6 +11,7 @@ pub fn load_a_texture(app_surface: &app_surface::AppSurface) -> (wgpu::Texture, 
         height: info.height,
         depth_or_array_layers: 1,
     };
+
     let texture = app_surface.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size,

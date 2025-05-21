@@ -58,6 +58,8 @@ impl Texture {
         queue: &wgpu::Queue,
         bytes: &[u8],
         label: &str,
+        // 如果纹理数据不是基于 sRGB 色彩空间制作的，
+        // 但指定了 RgbaUnormSrgb 格式，会由于改变了 GPU 对纹理的采样方式而导致渲染结果与预期不符
         is_normal_map: bool,
     ) -> Result<Self> {
         let img = image::load_from_memory(bytes)?;
@@ -85,6 +87,7 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
+            // 时使用 Rgba8Unorm 来避免。让我们给 Texture 结构体添加一个 is_normal_map 参数
             format: if is_normal_map {
                 wgpu::TextureFormat::Rgba8Unorm
             } else {

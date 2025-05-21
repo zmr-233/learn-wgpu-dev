@@ -35,5 +35,5 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 
 @fragment 
 fn fs_main(in : VertexOutput) -> @location(0) vec4f {
-  return textureSample(tex, tex_sampler, in.uv);
+    return textureSample(tex, tex_sampler, in.uv);
 }

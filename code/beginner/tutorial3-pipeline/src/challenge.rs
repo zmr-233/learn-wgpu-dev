@@ -201,7 +201,7 @@ impl WgpuAppAction for WgpuApp {
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
                         r: 0.1,
-                        g: 0.2,
+                        g: 0.6,
                         b: 0.3,
                         a: 1.0,
                     }),

@@ -94,6 +94,7 @@ pub async fn load_model(
     let mut materials = Vec::new();
     for m in obj_materials? {
         let diffuse_texture = load_texture(&m.diffuse_texture, false, device, queue).await?;
+        // 添加以下代码来实际加载法线贴图：
         let normal_texture = load_texture(&m.normal_texture, true, device, queue).await?;
 
         materials.push(model::Material::new(
@@ -121,7 +122,7 @@ pub async fn load_model(
                         m.mesh.normals[i * 3 + 1],
                         m.mesh.normals[i * 3 + 2],
                     ],
-                    // We'll calculate these later
+                    // 随后会计算实际值来替换
                     tangent: [0.0; 3],
                     bitangent: [0.0; 3],
                 })
@@ -134,6 +135,7 @@ pub async fn load_model(
             // use the triangles, so we need to loop through the
             // indices in chunks of 3
             for c in indices.chunks(3) {
+                // === 取出三个顶点的属性 ===
                 let v0 = vertices[c[0] as usize];
                 let v1 = vertices[c[1] as usize];
                 let v2 = vertices[c[2] as usize];
@@ -146,6 +148,7 @@ pub async fn load_model(
                 let uv1: glam::Vec2 = v1.tex_coords.into();
                 let uv2: glam::Vec2 = v2.tex_coords.into();
 
+                // === 构造“边向量”与 “UV 边向量” ===
                 // Calculate the edges of the triangle
                 let delta_pos1 = pos1 - pos0;
                 let delta_pos2 = pos2 - pos0;
@@ -155,6 +158,7 @@ pub async fn load_model(
                 let delta_uv1 = uv1 - uv0;
                 let delta_uv2 = uv2 - uv0;
 
+                // === 求解 T 和 B ===
                 // Solving the following system of equations will
                 // give us the tangent and bitangent.
                 //     delta_pos1 = delta_uv1.x * T + delta_u.y * B

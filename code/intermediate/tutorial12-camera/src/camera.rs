@@ -58,6 +58,8 @@ impl Projection {
     }
 
     pub fn calc_matrix(&self) -> glam::Mat4 {
+        // 从 perspective_rh 函数返回的是右手坐标系（right-handed coordinate system）的投影矩阵
+        // ，想让 Z 轴指向屏幕内（也就是左手坐标系的投影矩阵）需要使用 perspective_lh
         glam::Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar)
     }
 }
@@ -138,11 +140,20 @@ impl CameraController {
         self.rotate_horizontal = mouse_dx as f32;
         self.rotate_vertical = mouse_dy as f32;
     }
-
+    // 在 winit 里，`MouseScrollDelta` 有两种变体：
+    // 1. LineDelta(x, y)
+    //     • “行滚动”，也就是以“行”为单位的逻辑滚动增量。
+    //     • 典型来源是传统鼠标滚轮，每转一格就会报告一个固定的行数（通常 y=±1）。
+    //     • 用于把握粗略的翻页／滚屏操作。
+    //
+    // 2. PixelDelta(PhysicalPosition { x, y })
+    //     • “像素滚动”，以物理像素为单位的高精度滚动增量。
+    //     • 常见于触摸板、精确滚动鼠标或者支持高分辨率滚动的设备。
+    //     • 能拿到每次滚动的真实像素数，更适合做平滑滚动。
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
         self.scroll = match delta {
             // I'm assuming a line is about 100 pixels
-            MouseScrollDelta::LineDelta(_, scroll) => -scroll * 0.5,
+            MouseScrollDelta::LineDelta(_, scroll) => -scroll * 25.0,
             MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => -*scroll as f32,
         };
     }
@@ -150,25 +161,23 @@ impl CameraController {
     pub fn update_camera(&mut self, camera: &mut Camera, dt: Duration) {
         let dt = dt.as_secs_f32();
 
-        // Move forward/backward and left/right
+        // 前后左右移动
         let (yaw_sin, yaw_cos) = camera.yaw.sin_cos();
         let forward = glam::Vec3::new(yaw_cos, 0.0, yaw_sin).normalize();
         let right = glam::Vec3::new(-yaw_sin, 0.0, yaw_cos).normalize();
         camera.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
         camera.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
 
-        // Move in/out (aka. "zoom")
-        // Note: this isn't an actual zoom. The camera's position
-        // changes when zooming. I've added this to make it easier
-        // to get closer to an object you want to focus on.
+        // 变焦（缩放）
+        // 注意：这不是一个真实的变焦。
+        // 通过摄像机的位置变化来模拟变焦，使你更容易靠近想聚焦的物体。
         let (pitch_sin, pitch_cos) = camera.pitch.sin_cos();
         let scrollward =
             glam::Vec3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
         camera.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
         self.scroll = 0.0;
 
-        // Move up/down. Since we don't use roll, we can just
-        // modify the y coordinate directly.
+        // 由于我们没有使用滚动，所以直接修改 y 坐标来上下移动。
         camera.position.y += (self.amount_up - self.amount_down) * self.speed * dt;
 
         // Rotate

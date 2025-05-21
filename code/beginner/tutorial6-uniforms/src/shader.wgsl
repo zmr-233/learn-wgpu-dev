@@ -3,6 +3,8 @@
 struct CameraUniform {
     view_proj: mat4x4f,
 };
+
+// @group(N) 这个数字由我们的 render_pipeline_layout 决定
 @group(1) @binding(0)
 var<uniform> camera: CameraUniform;
 
@@ -30,7 +32,8 @@ fn vs_main(
 
 @group(0) @binding(0)
 var t_diffuse: texture_2d<f32>;
-@group(0)@binding(1)
+
+@group(0) @binding(1)
 var s_diffuse: sampler;
 
 @fragment

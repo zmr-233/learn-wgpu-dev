@@ -97,6 +97,7 @@ impl WgpuAppAction for WgpuApp {
         // 创建 wgpu 应用
         let app = AppSurface::new(window).await;
 
+        //1. 一个通用的纹理绑定组布局
         let texture_bind_group_layout =
             app.device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -126,6 +127,7 @@ impl WgpuAppAction for WgpuApp {
             texture::Texture::from_bytes(&app.device, &app.queue, diffuse_bytes, "happy-tree.png")
                 .unwrap();
 
+        //2. 使用同一个布局创建两个绑定组
         let diffuse_bind_group = app.device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &texture_bind_group_layout,
             entries: &[
@@ -150,6 +152,7 @@ impl WgpuAppAction for WgpuApp {
         )
         .unwrap();
 
+        // 可见再次复用
         let cartoon_bind_group = app.device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &texture_bind_group_layout,
             entries: &[
@@ -313,6 +316,7 @@ impl WgpuAppAction for WgpuApp {
                 ..Default::default()
             });
 
+            // 原来控制绑定组的部分在这里:
             let bind_group = if self.is_space_pressed {
                 &self.cartoon_bind_group
             } else {

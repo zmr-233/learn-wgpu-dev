@@ -544,6 +544,9 @@ impl WgpuAppAction for WgpuApp {
         true
     }
 
+    // 一直在使用 WindowEvent 来控制摄像机，这很有效，但它并不是最好的解决方案
+    // 操作系统通常会对 CursorMoved 事件的数据进行转换，以实现光标加速等效果
+    // 可以修改输入函数函数来处理 DeviceEvent 而不是 WindowEvent
     fn device_input(&mut self, event: &DeviceEvent) -> bool {
         if let DeviceEvent::MouseMotion { delta } = event {
             if self.mouse_pressed {
@@ -556,6 +559,7 @@ impl WgpuAppAction for WgpuApp {
 
     fn update(&mut self, dt: core::time::Duration) {
         // UPDATED!
+        //它是帧之间的时间差（delta time，也可以说是时间间隔），用来辅助实现摄像机的平滑移动
         self.camera_controller.update_camera(&mut self.camera, dt);
         self.camera_uniform
             .update_view_proj(&self.camera, &self.projection);
@@ -566,6 +570,7 @@ impl WgpuAppAction for WgpuApp {
         );
 
         // Update the light
+        // 既然如此，我们也用 dt 来平滑光源的旋转：
         let old_position = glam::Vec3::from_array(self.light_uniform.position);
         self.light_uniform.position =
             (glam::Quat::from_axis_angle(glam::Vec3::Y, consts::PI / 180.) * old_position).into();

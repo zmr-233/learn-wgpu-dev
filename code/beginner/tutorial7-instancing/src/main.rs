@@ -19,6 +19,67 @@ const INSTANCE_DISPLACEMENT: glam::Vec3 = glam::Vec3::new(
     NUM_INSTANCES_PER_ROW as f32 * 0.5,
 );
 
+// NEW!
+struct Instance {
+    position: glam::Vec3,
+    rotation: glam::Quat,
+}
+
+// NEW!
+impl Instance {
+    fn to_raw(&self) -> InstanceRaw {
+        InstanceRaw {
+            model: (glam::Mat4::from_translation(self.position)
+                * glam::Mat4::from_quat(self.rotation))
+            .to_cols_array_2d(),
+        }
+    }
+}
+
+// NEW!
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct InstanceRaw {
+    model: [[f32; 4]; 4],
+}
+
+impl InstanceRaw {
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use core::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
+            // 步进模式为 Instance => 处理一次新实例化绘制时，才会使用下一个实例数据
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    // 虽然顶点着色器现在只使用了插槽 0 和 1，但在后面的教程中将会使用 2、3 和 4
+                    // 此处从插槽 5 开始，确保与后面的教程不会有冲突
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                // mat4 从技术的角度来看是由 4 个 vec4 构成，占用 4 个插槽。
+                // 我们需要为每个 vec4 定义一个插槽，然后在着色器中重新组装出 mat4。
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                    shader_location: 8,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
@@ -31,6 +92,7 @@ impl Vertex {
         use core::mem;
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            // 步进模式为 Vertex => 每个顶点都会使用一个实例
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 wgpu::VertexAttribute {
@@ -187,69 +249,6 @@ impl CameraController {
     }
 }
 
-// NEW!
-struct Instance {
-    position: glam::Vec3,
-    rotation: glam::Quat,
-}
-
-// NEW!
-impl Instance {
-    fn to_raw(&self) -> InstanceRaw {
-        InstanceRaw {
-            model: (glam::Mat4::from_translation(self.position)
-                * glam::Mat4::from_quat(self.rotation))
-            .to_cols_array_2d(),
-        }
-    }
-}
-
-// NEW!
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct InstanceRaw {
-    model: [[f32; 4]; 4],
-}
-
-impl InstanceRaw {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        use core::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
-            // We need to switch from using a step mode of Vertex to Instance
-            // This means that our shaders will only change to use the next
-            // instance when the shader starts processing a new instance
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    // While our vertex shader only uses locations 0, and 1 now, in later tutorials we'll
-                    // be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict with them later
-                    shader_location: 5,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
-                // for each vec4. We don't have to do this in code though.
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 6,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 7,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
-                    shader_location: 8,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-            ],
-        }
-    }
-}
-
 struct WgpuApp {
     app: AppSurface,
     render_pipeline: wgpu::RenderPipeline,
@@ -266,7 +265,7 @@ struct WgpuApp {
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
-    // NEW!
+    // NEW! 给 WgpuApp 添加两个字段：instances 和 instance_buffer
     instances: Vec<Instance>,
     #[allow(dead_code)]
     instance_buffer: wgpu::Buffer,
@@ -349,14 +348,15 @@ impl WgpuAppAction for WgpuApp {
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_proj(&camera);
 
-        let camera_buffer = app
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Camera Buffer"),
-                contents: bytemuck::cast_slice(&[camera_uniform]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        let camera_buffer: wgpu::Buffer =
+            app.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Camera Buffer"),
+                    contents: bytemuck::cast_slice(&[camera_uniform]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
 
+        // 创建一组 10 行 10 列空间排列均匀的实例数据
         let instances = (0..NUM_INSTANCES_PER_ROW)
             .flat_map(|z| {
                 (0..NUM_INSTANCES_PER_ROW).map(move |x| {
@@ -365,7 +365,8 @@ impl WgpuAppAction for WgpuApp {
                         y: 0.0,
                         z: z as f32,
                     } - INSTANCE_DISPLACEMENT;
-
+                    // 这一行特殊确保在坐标 (0, 0, 0) 处的对象不会被缩放到 0
+                    // 因为错误的四元数会影响到缩放
                     let rotation = if position.length().abs() <= f32::EPSILON {
                         // this is needed so an object at (0, 0, 0) won't get scaled to zero
                         // as Quaternions can effect scale if they're not create correctly
@@ -379,6 +380,7 @@ impl WgpuAppAction for WgpuApp {
             })
             .collect::<Vec<_>>();
 
+        // 仍然要设置缓冲区
         let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
         let instance_buffer = app
             .device
@@ -388,7 +390,7 @@ impl WgpuAppAction for WgpuApp {
                 usage: wgpu::BufferUsages::VERTEX,
             });
 
-        let camera_bind_group_layout =
+        let camera_bind_group_layout: wgpu::BindGroupLayout =
             app.device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     entries: &[wgpu::BindGroupLayoutEntry {
@@ -404,14 +406,15 @@ impl WgpuAppAction for WgpuApp {
                     label: Some("camera_bind_group_layout"),
                 });
 
-        let camera_bind_group = app.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &camera_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            }],
-            label: Some("camera_bind_group"),
-        });
+        let camera_bind_group: wgpu::BindGroup =
+            app.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &camera_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                }],
+                label: Some("camera_bind_group"),
+            });
 
         let shader = app
             .device
@@ -437,7 +440,11 @@ impl WgpuAppAction for WgpuApp {
                     module: &shader,
                     entry_point: Some("vs_main"),
                     compilation_options: Default::default(),
-                    buffers: &[Vertex::desc(), InstanceRaw::desc()],
+                    buffers: &[
+                        Vertex::desc(),
+                        // 需要为 InstanceRaw 创建一个新的顶点缓冲区布局：
+                        InstanceRaw::desc(),
+                    ],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
@@ -573,6 +580,8 @@ impl WgpuAppAction for WgpuApp {
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+
+            // 在 render() 函数中绑定 instance_buffer，并修改 draw_indexed() 绘制命令以使用我们实际的实例数
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             // UPDATED!

@@ -27,6 +27,7 @@ fn vs_main(
     model: VertexInput,
     instance: InstanceInput,
 ) -> VertexOutput {
+    // 需要将矩阵重新组装出来
     let model_matrix = mat4x4f(
         instance.model_matrix_0,
         instance.model_matrix_1,
@@ -43,7 +44,7 @@ fn vs_main(
 
 @group(0) @binding(0)
 var t_diffuse: texture_2d<f32>;
-@group(0)@binding(1)
+@group(0) @binding(1)
 var s_diffuse: sampler;
 
 @fragment

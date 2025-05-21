@@ -3,7 +3,7 @@ use std::{rc::Rc, sync::Arc};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
-    event::{ElementState, KeyEvent, WindowEvent},
+    event::{ElementState, KeyEvent, MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
     keyboard::KeyCode,
     keyboard::PhysicalKey,
@@ -36,6 +36,8 @@ impl WgpuApp {
 
         #[cfg(target_arch = "wasm32")]
         {
+            use std::cell::Cell;
+            use wgpu::Color;
             use winit::platform::web::WindowExtWebSys;
 
             let canvas = window.canvas().unwrap();
@@ -140,6 +142,20 @@ impl WgpuApp {
         }
         false
     }
+
+    /// 鼠标左键按下时依次切换背景色（类似 yield 的效果）
+    fn mouse_input(&mut self, state: &ElementState, button: &MouseButton) {
+        if *state == ElementState::Pressed && *button == MouseButton::Left {
+            self.clear_color = match self.clear_color {
+                wgpu::Color::BLACK => wgpu::Color::WHITE,
+                wgpu::Color::WHITE => wgpu::Color::RED,
+                wgpu::Color::RED => wgpu::Color::GREEN,
+                _ => wgpu::Color::BLACK,
+            };
+        }
+    }
+
+    // …
 
     /// 记录窗口大小已发生变化
     ///
@@ -292,6 +308,9 @@ impl ApplicationHandler for WgpuAppHandler {
 
         // 窗口事件
         match event {
+            WindowEvent::MouseInput { state, button, .. } => {
+                app.mouse_input(&state, &button);
+            }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }

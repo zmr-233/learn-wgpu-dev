@@ -3490,6 +3490,7 @@ dependencies = [
  "image 0.25.5",
  "instant",
  "log",
+ "pollster",
  "utils",
  "wgpu",
  "winit",

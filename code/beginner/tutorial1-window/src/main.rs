@@ -4,7 +4,7 @@ use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
-    event_loop::{ActiveEventLoop, EventLoop},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
 
@@ -119,5 +119,6 @@ fn main() -> Result<(), impl std::error::Error> {
 
     let events_loop = EventLoop::new().unwrap();
     let mut app = WgpuAppHandler::default();
+    events_loop.set_control_flow(ControlFlow::Poll);
     events_loop.run_app(&mut app)
 }

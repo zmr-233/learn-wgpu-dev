@@ -109,6 +109,7 @@ impl BlurNode {
     pub fn dispatch<'a, 'b: 'a>(&'b self, cpass: &mut wgpu::ComputePass<'a>) {
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, &self.bind_group, &[]);
+        // dispatch_workgroups() 就是调度计算任务的命令，接受 3 个 u32 类型的值做为参数
         cpass.dispatch_workgroups(self.workgroup_count.0, self.workgroup_count.1, 1);
     }
 }

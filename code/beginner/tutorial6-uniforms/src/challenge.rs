@@ -96,6 +96,10 @@ impl CameraStaging {
         }
     }
     fn update_camera(&self, camera_uniform: &mut CameraUniform) {
+        // 构建 “模型-视图-投影（MVP）” 矩阵，把一个绕 Z 轴的旋转（Model），拼到相机的 View·Projection 上：
+        // 1. build_view_projection_matrix() 返回的是 P·V（投影·视图）
+        // 2. Mat4::from_rotation_z(...) 是模型变换 M
+        // 3. 两者相乘得出的正好是 P·V·M
         camera_uniform.model_view_proj = (self.camera.build_view_projection_matrix()
             * glam::Mat4::from_rotation_z(self.model_rotation.to_radians()))
         .to_cols_array_2d();

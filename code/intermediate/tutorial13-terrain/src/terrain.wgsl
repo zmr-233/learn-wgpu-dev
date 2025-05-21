@@ -218,8 +218,8 @@ fn gen_terrain_fragment(in: GenVertexOutput) -> GenFragmentOutput {
     // indices.data[start_index + 4u] = v11;
     // indices.data[start_index + 5u] = v10;
 
-    let vert_component = bitcast<u32>(vert_component);
-    return GenFragmentOutput(vert_component, index);
+    let vert_component_2 = bitcast<u32>(vert_component);
+    return GenFragmentOutput(vert_component_2, index);
 }
 
 // ============================

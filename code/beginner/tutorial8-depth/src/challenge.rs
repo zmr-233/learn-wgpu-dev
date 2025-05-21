@@ -317,6 +317,7 @@ impl DepthPass {
             label: Some("depth_pass.bind_group"),
         });
 
+        // 这里只画了两个三角形 纹理是深度图
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Depth Pass VB"),
             contents: bytemuck::cast_slice(DEPTH_VERTICES),
@@ -412,7 +413,19 @@ impl DepthPass {
             label: Some("depth_pass.bind_group"),
         });
     }
+    // 可以这样理解——只要你为每个「窗口」（或渲染目标）都拿到对应的 TextureView，
+    // 就可以用同一个 CommandEncoder 先后开启多个 RenderPass，分别往不同的 view 里画面，最后一并提交给 GPU。
 
+    // 实现步骤大致是：
+
+    // 1. 对每个窗口调用 surface.get_current_texture() → texture.create_view()
+    // 2. 用同一个 encoder
+    // 3. begin_render_pass(view = &view0) { …draw for window0… }
+    // 4. begin_render_pass(view = &view1) { …draw for window1… }
+    // …
+    // queue.submit(Some(encoder.finish()))
+    // 这样可以一次性把所有窗口的渲染命令打包提交。但要注意每个窗口/Surface 需要各自管理自己的 swapchain 配置和当前帧纹理。
+    // 原来可以把encoder直接传入，直接在里面渲染
     fn render(&self, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Depth Visual Render Pass"),
@@ -764,6 +777,7 @@ impl WgpuAppAction for WgpuApp {
                     },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    // 这里的 view 是深度纹理的 view
                     view: &self.depth_pass.texture.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
@@ -783,6 +797,7 @@ impl WgpuAppAction for WgpuApp {
             render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as u32);
         }
 
+        // 单独渲染一遍深度纹理
         self.depth_pass.render(&view, &mut encoder);
 
         self.app.queue.submit(Some(encoder.finish()));

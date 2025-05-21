@@ -31,9 +31,18 @@ pub struct MVPMatUniform {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
+/// 场景统一数据结构，用于传递给着色器的常量数据
 pub struct SceneUniform {
+    /// 模型-视图-投影矩阵（Model-View-Projection Matrix）
+    /// 用于将模型坐标转换为裁剪空间坐标
     pub mvp: [[f32; 4]; 4],
+
+    /// 视口尺寸（宽度和高度），以像素为单位
+    /// 通常用于在着色器中进行坐标转换或计算
     pub viewport_pixels: [f32; 2],
+
+    /// 填充字段，用于确保数据对齐
+    /// 在WebGPU中，统一缓冲区通常需要特定的内存对齐
     pub padding: [f32; 2],
 }
 
