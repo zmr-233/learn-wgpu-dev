@@ -46,6 +46,39 @@ impl HilbertCurveApp {
             self.size_changed = false;
         }
     }
+
+    fn update_buffers(&mut self) {
+        // 构造 start/target 顶点集
+        let mut start_curve = HilbertCurve::new(self.curve_dimention);
+
+        // 计算下一次过渡的目标维度
+        let next_dim = if self.is_animation_up {
+            // 升维时，start 的点数要乘 4
+            start_curve.four_times_vertices();
+            self.curve_dimention + 1
+        } else {
+            self.curve_dimention - 1
+        };
+
+        let mut target_curve = HilbertCurve::new(next_dim);
+        if !self.is_animation_up {
+            // 降维时，target 的点数要乘 4
+            target_curve.four_times_vertices();
+        }
+
+        // 更新实例数 & 写缓冲
+        self.curve_vertex_count = target_curve.vertices.len();
+        self.app.queue.write_buffer(
+            &self.vertex_buffers[0],
+            0,
+            bytemuck::cast_slice(&start_curve.vertices),
+        );
+        self.app.queue.write_buffer(
+            &self.vertex_buffers[1],
+            0,
+            bytemuck::cast_slice(&target_curve.vertices),
+        );
+    }
 }
 
 impl WgpuAppAction for HilbertCurveApp {
